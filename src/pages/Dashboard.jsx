@@ -159,6 +159,23 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
+
+    // Refresh backend data whenever the installed app comes back into view.
+    // This keeps salary/attendance data current without requiring an APK rebuild
+    // when only database records change.
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        loadData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+    };
   }, [loadData]);
 
   const calculateDistance = (lat1, lng1, lat2, lng2) => {
