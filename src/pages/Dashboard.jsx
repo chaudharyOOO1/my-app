@@ -132,7 +132,17 @@ export default function Dashboard() {
         ).length,
       });
 
-      setSalaryRecords([]);
+      const { data: salaryData, error: salaryError } = await supabase
+        .from("salary_records")
+        .select("*")
+        .eq("employee_id", emp.id)
+        .order("month", { ascending: false });
+
+      if (salaryError) {
+        throw salaryError;
+      }
+
+      setSalaryRecords(salaryData || []);
     } catch (error) {
       console.error("Failed to load attendance:", error);
 
