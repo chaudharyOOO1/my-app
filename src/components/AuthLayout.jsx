@@ -17,6 +17,9 @@ export default function AuthLayout({ icon: Icon, title, subtitle, footer, childr
         {footer && (
           <p className="text-center text-sm text-muted-foreground mt-6">{footer}</p>
         )}
+        <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground/70">
+          Powered by Fortelus Allied Services © 2026
+        </p>
       </div>
     </div>
   );
