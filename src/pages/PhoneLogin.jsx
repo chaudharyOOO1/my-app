@@ -112,6 +112,9 @@ export default function PhoneLogin() {
         <p className="mt-6 text-center text-xs text-slate-400">
           Fortellus Allied Services Pvt Ltd (FAS)
         </p>
+        <p className="mt-2 text-center text-[11px] font-medium text-slate-400">
+          Powered by Fortelus Allied Services © 2026
+        </p>
       </motion.div>
     </div>
   );
