@@ -393,10 +393,12 @@ export default function Dashboard() {
 
         setTodayRecord(data);
 
-        setRecords((previous) => [
-          data,
-          ...previous,
-        ]);
+        setRecords((previous) => {
+          const withoutCurrent = previous.filter(
+            (record) => record.id !== data.id
+          );
+          return [data, ...withoutCurrent];
+        });
 
         toast({
           title: "Checked in",
