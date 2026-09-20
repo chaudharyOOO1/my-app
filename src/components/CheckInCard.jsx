@@ -107,20 +107,20 @@ export default function CheckInCard({ todayRecord, onLogin, onLogout, loading, g
             </div>
           )}
 
-          {isLoggedOut ? (
-            <div className="flex items-center gap-2 text-emerald-300">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium">
-                You're done for today
-                {todayRecord?.work_hours != null &&
-                  ` · ${Number(todayRecord.work_hours).toFixed(2)} hrs`}
-              </span>
-            </div>
-          ) : (
+          <div className="flex flex-col gap-3">
+            {isLoggedOut && (
+              <div className="flex items-center gap-2 text-emerald-300">
+                <CheckCircle2 className="h-5 w-5" />
+                <span className="font-medium">
+                  Logged out at {logoutTime}. You can log in again.
+                </span>
+              </div>
+            )}
+
             <Button
               size="lg"
               disabled={loading || (!isLoggedIn && geoStatus === "checking")}
-              onClick={isLoggedIn ? onLogout : onLogin}
+              onClick={isLoggedIn && !isLoggedOut ? onLogout : onLogin}
               className="w-full sm:w-auto rounded-full bg-white px-8 py-6 text-base font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-60"
             >
               {loading ? (
@@ -128,7 +128,7 @@ export default function CheckInCard({ todayRecord, onLogin, onLogout, loading, g
                   <Clock className="mr-2 h-5 w-5 animate-spin" />
                   Please wait...
                 </>
-              ) : isLoggedIn ? (
+              ) : isLoggedIn && !isLoggedOut ? (
                 <>
                   <LogOut className="mr-2 h-5 w-5" />
                   Logout
@@ -136,11 +136,11 @@ export default function CheckInCard({ todayRecord, onLogin, onLogout, loading, g
               ) : (
                 <>
                   <LogIn className="mr-2 h-5 w-5" />
-                  Login
+                  Login Again
                 </>
               )}
             </Button>
-          )}
+          </div>
         </div>
       </div>
     </motion.div>
