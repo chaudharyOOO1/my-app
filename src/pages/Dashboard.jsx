@@ -105,7 +105,7 @@ export default function Dashboard() {
       const currentMonthPrefix = `${currentYear}-${currentMonth}`;
 
       const monthAttendance = att.filter((record) =>
-        record.attendance_date?.startsWith(currentMonthPrefix)
+      record.attendance_date?.startsWith(currentMonthPrefix)
       );
 
       setStats({
