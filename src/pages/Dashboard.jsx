@@ -22,13 +22,16 @@ function todayStr() {
 }
 
 function computeStatus(checkInIso, shiftStart) {
-  if (!shiftStart) return "present";
+  if (!shiftStart) {
+    return "present";
+  }
 
-  const [h, m] = shiftStart.split(":").map(Number);
+  const [hours, minutes] = shiftStart.split(":").map(Number);
+
   const checkIn = new Date(checkInIso);
   const grace = new Date(checkIn);
 
-  grace.setHours(h, m + 15, 0, 0);
+  grace.setHours(hours, minutes + 15, 0, 0);
 
   return checkIn > grace ? "late" : "present";
 }
@@ -38,6 +41,7 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [employee, setEmployee] = useState(() => getSession());
+
   const [todayRecord, setTodayRecord] = useState(null);
   const [records, setRecords] = useState([]);
   const [salaryRecords, setSalaryRecords] = useState([]);
@@ -75,37 +79,36 @@ export default function Dashboard() {
     setEmployee(emp);
 
     try {
-      const { data: attendanceData, error: attendanceError } =
-        await supabase
-          .from("attendance")
-          .select("*")
-          .eq("employee_id", emp.id)
-          .order("attendance_date", { ascending: false })
-          .limit(100);
+      const { data, error } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("employee_id", emp.id)
+        .order("attendance_date", { ascending: false })
+        .limit(100);
 
-      if (attendanceError) {
-        throw attendanceError;
+      if (error) {
+        throw error;
       }
 
-      const att = attendanceData || [];
+      const attendance = data || [];
 
-      setRecords(att);
+      setRecords(attendance);
 
-      const todayDate = todayStr();
+      const today = todayStr();
 
-      const today = att.find(
-        (record) => record.attendance_date === todayDate
+      const currentRecord = attendance.find(
+        (record) => record.attendance_date === today
       );
 
-      setTodayRecord(today || null);
+      setTodayRecord(currentRecord || null);
 
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
       const currentMonthPrefix = `${currentYear}-${currentMonth}`;
 
-      const monthAttendance = att.filter((record) =>
-      record.attendance_date?.startsWith(currentMonthPrefix)
+      const monthAttendance = attendance.filter((record) =>
+        record.attendance_date?.startsWith(currentMonthPrefix)
       );
 
       setStats({
@@ -126,13 +129,19 @@ export default function Dashboard() {
         ).length,
       });
 
+      /*
+       * Salary migration will be handled separately.
+       * Keeping this empty prevents the existing salary component
+       * from receiving old Base44 data.
+       */
       setSalaryRecords([]);
     } catch (error) {
-      console.error("Failed to load dashboard data:", error);
+      console.error("Failed to load attendance:", error);
 
       toast({
         title: "Failed to load data",
-        description: error.message || "Please try again.",
+        description:
+          error?.message || "Please refresh and try again.",
         variant: "destructive",
       });
     } finally {
@@ -144,60 +153,82 @@ export default function Dashboard() {
     loadData();
   }, [loadData]);
 
+  const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const earthRadius = 6371000;
+
+    const latitude1 = (lat1 * Math.PI) / 180;
+    const latitude2 = (lat2 * Math.PI) / 180;
+
+    const deltaLatitude =
+      ((lat2 - lat1) * Math.PI) / 180;
+
+    const deltaLongitude =
+      ((lng2 - lng1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaLatitude / 2) ** 2 +
+      Math.cos(latitude1) *
+        Math.cos(latitude2) *
+        Math.sin(deltaLongitude / 2) ** 2;
+
+    const c =
+      2 *
+      Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return earthRadius * c;
+  };
+
   const startPunch = async (type) => {
     setLoading(true);
+    setPunchType(type);
 
     try {
-      setPunchType(type);
-
       const now = new Date().toISOString();
+
       let coords = null;
 
+      /*
+       * GPS is advisory only.
+       * Attendance is never blocked if GPS is unavailable.
+       */
       try {
         coords = await getCurrentPosition();
       } catch (error) {
         console.warn("GPS unavailable:", error);
       }
 
+      /*
+       * Show geofence status if site coordinates exist.
+       * Being outside the radius does NOT block attendance.
+       */
       if (hasGeofence && coords) {
-        const earthRadius = 6371000;
+        const distance = Math.round(
+          calculateDistance(
+            coords.lat,
+            coords.lng,
+            Number(employee.site_latitude),
+            Number(employee.site_longitude)
+          )
+        );
 
-        const lat1 = (coords.lat * Math.PI) / 180;
-        const lat2 = (employee.site_latitude * Math.PI) / 180;
+        setGeoDistance(distance);
 
-        const deltaLat =
-          ((employee.site_latitude - coords.lat) * Math.PI) / 180;
+        const radius = Number(
+          employee.geofence_radius || 200
+        );
 
-        const deltaLng =
-          ((employee.site_longitude - coords.lng) * Math.PI) / 180;
-
-        const a =
-          Math.sin(deltaLat / 2) ** 2 +
-          Math.cos(lat1) *
-            Math.cos(lat2) *
-            Math.sin(deltaLng / 2) ** 2;
-
-        const distance =
-          2 *
-          earthRadius *
-          Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        const roundedDistance = Math.round(distance);
-
-        setGeoDistance(roundedDistance);
-
-        if (
-          roundedDistance >
-          (employee.geofence_radius || 200)
-        ) {
+        if (distance > radius) {
           setGeoStatus("outside");
         } else {
           setGeoStatus("inside");
         }
+      } else {
+        setGeoStatus("idle");
+        setGeoDistance(null);
       }
 
-      setPunchCoords(coords);
       setPunchTime(now);
+      setPunchCoords(coords);
       setSelfieOpen(true);
     } catch (error) {
       console.error("Punch preparation failed:", error);
@@ -207,33 +238,48 @@ export default function Dashboard() {
           type === "check-in"
             ? "Check-in failed"
             : "Check-out failed",
-        description: error.message || "Please try again.",
+        description:
+          error?.message || "Please try again.",
         variant: "destructive",
       });
+
+      setPunchType(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const uploadSelfie = async (file, type, attendanceDate) => {
+  const uploadSelfie = async (
+    file,
+    type,
+    attendanceDate
+  ) => {
+    if (!file) {
+      throw new Error("Selfie file is missing.");
+    }
+
     const filePath =
       `${employee.id}/${attendanceDate}/${type}-${Date.now()}.jpg`;
 
-    const { error: uploadError } = await supabase.storage
+    const { error } = await supabase.storage
       .from("employee-selfies")
       .upload(filePath, file, {
         cacheControl: "3600",
-        upsert: false,
         contentType: "image/jpeg",
+        upsert: false,
       });
 
-    if (uploadError) {
-      throw uploadError;
+    if (error) {
+      throw error;
     }
 
     const { data } = supabase.storage
       .from("employee-selfies")
       .getPublicUrl(filePath);
+
+    if (!data?.publicUrl) {
+      throw new Error("Could not create selfie URL.");
+    }
 
     return data.publicUrl;
   };
@@ -243,8 +289,15 @@ export default function Dashboard() {
     setLoading(true);
 
     try {
+      if (!employee?.id) {
+        throw new Error("Employee session is missing.");
+      }
+
       const attendanceDate = todayStr();
 
+      /*
+       * CHECK-IN
+       */
       if (punchType === "check-in") {
         if (todayRecord) {
           toast({
@@ -252,6 +305,7 @@ export default function Dashboard() {
             description:
               "Today's attendance record already exists.",
           });
+
           return;
         }
 
@@ -261,24 +315,27 @@ export default function Dashboard() {
           attendanceDate
         );
 
-        const stampedAt =
+        const checkInTime =
           punchTime || new Date().toISOString();
 
         const status = computeStatus(
-          stampedAt,
+          checkInTime,
           employee.shift_start
         );
 
-        const { data: created, error } = await supabase
+        const { data, error } = await supabase
           .from("attendance")
           .insert({
             employee_id: employee.id,
             attendance_date: attendanceDate,
-            check_in_time: stampedAt,
+            check_in_time: checkInTime,
             check_in_selfie_url: selfieUrl,
-            check_in_latitude: punchCoords?.lat ?? null,
-            check_in_longitude: punchCoords?.lng ?? null,
-            check_in_accuracy: punchCoords?.accuracy ?? null,
+            check_in_latitude:
+              punchCoords?.lat ?? null,
+            check_in_longitude:
+              punchCoords?.lng ?? null,
+            check_in_accuracy:
+              punchCoords?.accuracy ?? null,
             status,
           })
           .select("*")
@@ -288,8 +345,11 @@ export default function Dashboard() {
           throw error;
         }
 
-        setTodayRecord(created);
-        setRecords((previous) => [created, ...previous]);
+        setTodayRecord(data);
+        setRecords((previous) => [
+          data,
+          ...previous,
+        ]);
 
         toast({
           title: "Checked in",
@@ -299,6 +359,9 @@ export default function Dashboard() {
         return;
       }
 
+      /*
+       * CHECK-OUT
+       */
       if (punchType === "check-out") {
         if (!todayRecord) {
           toast({
@@ -307,6 +370,7 @@ export default function Dashboard() {
               "Today's check-in record was not found.",
             variant: "destructive",
           });
+
           return;
         }
 
@@ -316,6 +380,7 @@ export default function Dashboard() {
             description:
               "Today's attendance is already completed.",
           });
+
           return;
         }
 
@@ -328,14 +393,17 @@ export default function Dashboard() {
         const checkOutTime =
           punchTime || new Date().toISOString();
 
-        const { data: updated, error } = await supabase
+        const { data, error } = await supabase
           .from("attendance")
           .update({
             check_out_time: checkOutTime,
             check_out_selfie_url: selfieUrl,
-            check_out_latitude: punchCoords?.lat ?? null,
-            check_out_longitude: punchCoords?.lng ?? null,
-            check_out_accuracy: punchCoords?.accuracy ?? null,
+            check_out_latitude:
+              punchCoords?.lat ?? null,
+            check_out_longitude:
+              punchCoords?.lng ?? null,
+            check_out_accuracy:
+              punchCoords?.accuracy ?? null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", todayRecord.id)
@@ -346,45 +414,61 @@ export default function Dashboard() {
           throw error;
         }
 
-        setTodayRecord(updated);
+        setTodayRecord(data);
 
         setRecords((previous) =>
           previous.map((record) =>
-            record.id === updated.id ? updated : record
+            record.id === data.id
+              ? data
+              : record
           )
         );
 
-        if (
-          updated.check_in_time &&
-          updated.check_out_time
-        ) {
-          const checkIn = new Date(updated.check_in_time);
-          const checkOut = new Date(updated.check_out_time);
-          const hours = (checkOut - checkIn) / 3600000;
+        let description =
+          "Your attendance has been updated.";
 
-          toast({
-            title: "Checked out",
-            description: `Worked ${hours.toFixed(2)} hrs`,
-          });
-        } else {
-          toast({
-            title: "Checked out",
-            description:
-              "Your attendance has been updated.",
-          });
+        if (
+          data.check_in_time &&
+          data.check_out_time
+        ) {
+          const checkIn = new Date(
+            data.check_in_time
+          );
+
+          const checkOut = new Date(
+            data.check_out_time
+          );
+
+          const hours =
+            (checkOut.getTime() -
+              checkIn.getTime()) /
+            3600000;
+
+          description =
+            `Worked ${hours.toFixed(2)} hrs`;
         }
+
+        toast({
+          title: "Checked out",
+          description,
+        });
       }
     } catch (error) {
-      console.error("Attendance operation failed:", error);
+      console.error(
+        "Attendance operation failed:",
+        error
+      );
 
       toast({
         title:
           punchType === "check-in"
             ? "Check-in failed"
             : "Check-out failed",
+
         description:
-          error.message ||
+          error?.message ||
           "Something went wrong. Please try again.",
+
         variant: "destructive",
       });
     } finally {
@@ -434,7 +518,9 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate("/erp-settings")}
+              onClick={() =>
+                navigate("/erp-settings")
+              }
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
             >
               <Settings className="h-4 w-4" />
@@ -461,8 +547,12 @@ export default function Dashboard() {
           <div className="space-y-6 lg:col-span-2">
             <CheckInCard
               todayRecord={todayRecord}
-              onLogin={() => startPunch("check-in")}
-              onLogout={() => startPunch("check-out")}
+              onLogin={() =>
+                startPunch("check-in")
+              }
+              onLogout={() =>
+                startPunch("check-out")
+              }
               loading={loading}
               geoStatus={geoStatus}
               geoDistance={geoDistance}
@@ -471,13 +561,19 @@ export default function Dashboard() {
 
             <AttendanceSummary stats={stats} />
 
-            <AttendanceCalendar records={records} />
+            <AttendanceCalendar
+              records={records}
+            />
 
-            <AttendanceHistory records={records} />
+            <AttendanceHistory
+              records={records}
+            />
           </div>
 
           <div className="space-y-6">
-            <EmployeeProfile employee={employee} />
+            <EmployeeProfile
+              employee={employee}
+            />
 
             <SalaryCard
               employee={employee}
