@@ -1,4 +1,3 @@
-```jsx
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -26,7 +25,9 @@ function computeStatus(checkInIso, shiftStart) {
     return "present";
   }
 
-  const [hours, minutes] = shiftStart.split(":").map(Number);
+  const parts = shiftStart.split(":").map(Number);
+  const hours = parts[0];
+  const minutes = parts[1];
 
   const checkIn = new Date(checkInIso);
   const grace = new Date(checkIn);
@@ -105,8 +106,9 @@ export default function Dashboard() {
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+
       const currentMonthPrefix =
-  String(currentYear) + "-" + currentMonth;
+        String(currentYear) + "-" + currentMonth;
 
       const monthAttendance = attendance.filter((record) =>
         record.attendance_date?.startsWith(currentMonthPrefix)
@@ -130,11 +132,6 @@ export default function Dashboard() {
         ).length,
       });
 
-      /*
-       * Salary migration will be handled separately.
-       * Keeping this empty prevents the existing salary component
-       * from receiving old Base44 data.
-       */
       setSalaryRecords([]);
     } catch (error) {
       console.error("Failed to load attendance:", error);
@@ -188,20 +185,12 @@ export default function Dashboard() {
 
       let coords = null;
 
-      /*
-       * GPS is advisory only.
-       * Attendance is never blocked if GPS is unavailable.
-       */
       try {
         coords = await getCurrentPosition();
       } catch (error) {
         console.warn("GPS unavailable:", error);
       }
 
-      /*
-       * Show geofence status if site coordinates exist.
-       * Being outside the radius does NOT block attendance.
-       */
       if (hasGeofence && coords) {
         const distance = Math.round(
           calculateDistance(
@@ -239,8 +228,10 @@ export default function Dashboard() {
           type === "check-in"
             ? "Check-in failed"
             : "Check-out failed",
+
         description:
           error?.message || "Please try again.",
+
         variant: "destructive",
       });
 
@@ -260,7 +251,14 @@ export default function Dashboard() {
     }
 
     const filePath =
-      `${employee.id}/${attendanceDate}/${type}-${Date.now()}.jpg`;
+      String(employee.id) +
+      "/" +
+      String(attendanceDate) +
+      "/" +
+      String(type) +
+      "-" +
+      String(Date.now()) +
+      ".jpg";
 
     const { error } = await supabase.storage
       .from("employee-selfies")
@@ -296,9 +294,6 @@ export default function Dashboard() {
 
       const attendanceDate = todayStr();
 
-      /*
-       * CHECK-IN
-       */
       if (punchType === "check-in") {
         if (todayRecord) {
           toast({
@@ -347,6 +342,7 @@ export default function Dashboard() {
         }
 
         setTodayRecord(data);
+
         setRecords((previous) => [
           data,
           ...previous,
@@ -360,9 +356,6 @@ export default function Dashboard() {
         return;
       }
 
-      /*
-       * CHECK-OUT
-       */
       if (punchType === "check-out") {
         if (!todayRecord) {
           toast({
@@ -446,7 +439,9 @@ export default function Dashboard() {
             3600000;
 
           description =
-            `Worked ${hours.toFixed(2)} hrs`;
+            "Worked " +
+            hours.toFixed(2) +
+            " hrs";
         }
 
         toast({
@@ -596,4 +591,3 @@ export default function Dashboard() {
     </div>
   );
 }
-```
