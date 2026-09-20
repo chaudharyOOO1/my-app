@@ -8,7 +8,6 @@ import ScrollToTop from './components/ScrollToTop';
 import PhoneSessionGuard from '@/components/PhoneSessionGuard';
 import Dashboard from '@/pages/Dashboard';
 import PhoneLogin from '@/pages/PhoneLogin';
-import ErpSettings from '@/pages/ErpSettings';
 // Add page imports here
 
 const AuthenticatedApp = () => {
@@ -27,7 +26,6 @@ const AuthenticatedApp = () => {
       <Route path="/login" element={<PhoneLogin />} />
       <Route element={<PhoneSessionGuard />}>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/erp-settings" element={<ErpSettings />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
