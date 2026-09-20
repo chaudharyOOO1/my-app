@@ -16,10 +16,24 @@ export default function SalaryCard({ employee, salaryRecords }) {
   const [selectedMonth, setSelectedMonth] = useState("");
 
   useEffect(() => {
-    if (records.length && !selectedMonth) {
-      setSelectedMonth(records[0].month);
+    if (!records.length) {
+      setSelectedMonth("");
+      return;
     }
-  }, [records, selectedMonth]);
+
+    // Keep the user's selection when it still exists, but automatically
+    // select a newly-added latest month after the backend refreshes.
+    setSelectedMonth((current) => {
+      if (!current) return records[0].month;
+      if (!records.some((record) => record.month === current)) {
+        return records[0].month;
+      }
+      if (records[0].month !== current) {
+        return records[0].month;
+      }
+      return current;
+    });
+  }, [records]);
 
   const selected = records.find((s) => s.month === selectedMonth);
   const credited = selected?.status === "credited";
