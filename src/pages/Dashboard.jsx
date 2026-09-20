@@ -105,7 +105,8 @@ export default function Dashboard() {
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
-      const currentMonthPrefix = `${currentYear}-${currentMonth}`;
+      const currentMonthPrefix =
+  String(currentYear) + "-" + currentMonth;
 
       const monthAttendance = attendance.filter((record) =>
         record.attendance_date?.startsWith(currentMonthPrefix)
