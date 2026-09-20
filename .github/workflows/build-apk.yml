@@ -31,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera
 
       - name: Initialize Capacitor & Build
         run: |
