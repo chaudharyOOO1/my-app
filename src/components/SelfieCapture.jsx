@@ -2,6 +2,8 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, Check, Loader2, AlertCircle } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Camera as NativeCamera, CameraDirection, CameraResultType, CameraSource } from "@capacitor/camera";
 
 /** Draws a translucent stamp bar with the punch time, location name and GPS onto the photo. */
 function drawStamp(canvas, lines) {
@@ -88,7 +90,80 @@ export default function SelfieCapture({ open, onOpenChange, onConfirm, busy, pun
     return () => stopStream();
   }, [open, startCamera, stopStream]);
 
-  const capture = () => {
+  const capture = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        setError("");
+        setStarting(true);
+
+        const photo = await NativeCamera.getPhoto({
+          source: CameraSource.Camera,
+          direction: CameraDirection.Front,
+          resultType: CameraResultType.DataUrl,
+          quality: 85,
+          allowEditing: false,
+        });
+
+        if (!photo.dataUrl) {
+          throw new Error("Camera did not return a photo.");
+        }
+
+        const image = new Image();
+        image.onload = () => {
+          const size = Math.min(image.naturalWidth, image.naturalHeight);
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+
+          ctx.drawImage(
+            image,
+            (image.naturalWidth - size) / 2,
+            (image.naturalHeight - size) / 2,
+            size,
+            size,
+            0,
+            0,
+            size,
+            size
+          );
+
+          drawStamp(canvas, stampLines);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                setShot({
+                  url: URL.createObjectURL(blob),
+                  blob,
+                });
+              } else {
+                setError("Could not prepare the captured photo.");
+              }
+            },
+            "image/jpeg",
+            0.85
+          );
+          setStarting(false);
+        };
+
+        image.onerror = () => {
+          setStarting(false);
+          setError("Could not read the captured photo.");
+        };
+
+        image.src = photo.dataUrl;
+      } catch (err) {
+        console.error("Native camera failed:", err);
+        setStarting(false);
+        setError(
+          err?.message ||
+            "Camera unavailable. Please allow camera access and try again."
+        );
+      }
+      return;
+    }
+
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
     const size = Math.min(video.videoWidth, video.videoHeight);
