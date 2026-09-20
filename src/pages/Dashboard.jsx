@@ -5,7 +5,7 @@ import { Clock } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 import { supabase } from "@/api/supabaseClient";
-import { getSession, clearSession } from "@/lib/phoneSession";
+import { getSession, setSession, clearSession } from "@/lib/phoneSession";
 import { getCurrentPosition } from "@/lib/geofence";
 
 import CheckInCard from "@/components/CheckInCard";
@@ -77,9 +77,28 @@ export default function Dashboard() {
       return;
     }
 
-    setEmployee(emp);
-
     try {
+      // The local session is only used to identify the employee. All actual
+      // employee information is always re-fetched from Supabase.
+      const { data: freshEmployee, error: employeeError } = await supabase
+        .from("employees")
+        .select("*")
+        .eq("id", emp.id)
+        .single();
+
+      if (employeeError) {
+        throw employeeError;
+      }
+
+      if (!freshEmployee || freshEmployee.status === "inactive") {
+        clearSession();
+        navigate("/login");
+        return;
+      }
+
+      setEmployee(freshEmployee);
+      setSession(freshEmployee);
+
       const { data, error } = await supabase
         .from("attendance")
         .select("*")
@@ -158,11 +177,10 @@ export default function Dashboard() {
   }, [navigate, toast]);
 
   useEffect(() => {
+    // Initial load: employee, attendance and salary all come from Supabase.
     loadData();
 
-    // Refresh backend data whenever the installed app comes back into view.
-    // This keeps salary/attendance data current without requiring an APK rebuild
-    // when only database records change.
+    // Refresh immediately whenever the installed app becomes active again.
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") {
         loadData();
@@ -172,9 +190,19 @@ export default function Dashboard() {
     document.addEventListener("visibilitychange", refreshWhenVisible);
     window.addEventListener("focus", refreshWhenVisible);
 
+    // Keep backend-driven information current while the app is open.
+    // This means HR/admin changes appear automatically without rebuilding
+    // or reinstalling the APK.
+    const refreshTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadData();
+      }
+    }, 30000);
+
     return () => {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       window.removeEventListener("focus", refreshWhenVisible);
+      window.clearInterval(refreshTimer);
     };
   }, [loadData]);
 
