@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Clock, Settings } from "lucide-react";
+import { Clock } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 import { supabase } from "@/api/supabaseClient";
@@ -322,16 +322,6 @@ export default function Dashboard() {
       const attendanceDate = todayStr();
 
       if (punchType === "check-in") {
-        if (todayRecord) {
-          toast({
-            title: "Already checked in",
-            description:
-              "Today's attendance record already exists.",
-          });
-
-          return;
-        }
-
         const selfieUrl = await uploadSelfie(
           file,
           "check-in",
@@ -346,23 +336,28 @@ export default function Dashboard() {
           employee.shift_start
         );
 
-        const { data, error } = await supabase
-          .from("attendance")
-          .insert({
-            employee_id: employee.id,
-            attendance_date: attendanceDate,
-            check_in_time: checkInTime,
-            check_in_selfie_url: selfieUrl,
-            check_in_latitude:
-              punchCoords?.lat ?? null,
-            check_in_longitude:
-              punchCoords?.lng ?? null,
-            check_in_accuracy:
-              punchCoords?.accuracy ?? null,
-            status,
-          })
-          .select("*")
-          .single();
+        const payload = {
+          employee_id: employee.id,
+          attendance_date: attendanceDate,
+          check_in_time: checkInTime,
+          check_in_selfie_url: selfieUrl,
+          check_in_latitude: punchCoords?.lat ?? null,
+          check_in_longitude: punchCoords?.lng ?? null,
+          check_in_accuracy: punchCoords?.accuracy ?? null,
+          check_out_time: null,
+          check_out_selfie_url: null,
+          check_out_latitude: null,
+          check_out_longitude: null,
+          check_out_accuracy: null,
+          status,
+          updated_at: new Date().toISOString(),
+        };
+
+        const query = todayRecord
+          ? supabase.from("attendance").update(payload).eq("id", todayRecord.id)
+          : supabase.from("attendance").insert(payload);
+
+        const { data, error } = await query.select("*").single();
 
         if (error) {
           throw error;
@@ -540,16 +535,6 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={() =>
-                navigate("/erp-settings")
-              }
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              <Settings className="h-4 w-4" />
-              ERP Settings
-            </button>
-
             <button
               onClick={handleSignOut}
               className="text-sm font-medium text-slate-500 hover:text-slate-900"
