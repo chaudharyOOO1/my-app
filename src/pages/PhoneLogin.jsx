@@ -23,7 +23,10 @@ export default function PhoneLogin() {
     setError("");
     setLoading(true);
     try {
-      const results = await base44.entities.Employee.filter({ phone: clean });
+      const { data: results, error } = await supabase
+  .from("employees")
+  .select("*")
+  .eq("phone", clean);
       if (results.length > 0 && results[0].status !== "inactive") {
         setSession(results[0]);
         navigate("/");
